@@ -1,0 +1,86 @@
+# ==========================================
+# Dependency directories
+# ==========================================
+node_modules/
+server/venv/
+venv/
+.venv/
+env/
+
+# ==========================================
+# Production build outputs
+# ==========================================
+dist/
+dist-ssr/
+build/
+*.local
+.vite/
+
+# ==========================================
+# Database & SQLite storage
+# ==========================================
+founderos.db
+server/founderos.db
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ==========================================
+# Python bytecode & test caches
+# ==========================================
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Secrets & Environment variables
+# ==========================================
+.env
+.env.*
+server/.env
+server/.env.*
+!.env.example
+!server/.env.example
+*.pem
+*.key
+
+# ==========================================
+# Log files
+# ==========================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ==========================================
+# Operating System & Editor metadata
+# ==========================================
+.DS_Store
+**/.DS_Store
+._*
+**/._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==========================================
+# Local planning docs & external research mirrors
+# ==========================================
+Plan_Doc_1.md
+Plan_Doc_2.md
+media_files/
