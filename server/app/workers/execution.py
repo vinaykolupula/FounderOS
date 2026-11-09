@@ -140,6 +140,7 @@ async def run_execution_cycle(workspace_id: Optional[int] = None):
             memory_context = "\n".join([f"- Decision [{d.decision_code}]: {d.title} ({d.status})" for d in recent_decisions]) if recent_decisions else "- No prior decisions recorded."
 
             processed_count = 0
+            failed_count = 0
             for task in delegated_tasks:
                 logger.info(f"Agent processing delegated task: {task.title}")
                 
@@ -272,14 +273,13 @@ async def run_execution_cycle(workspace_id: Optional[int] = None):
                         details={"taskId": task.id, "error": str(e)}
                     )
                     session.add(audit)
+                    failed_count += 1
 
-                processed_count += 1
-
-            if processed_count > 0:
+            if processed_count > 0 or failed_count > 0:
                 await session.commit()
                 # Broadcast WebSocket refresh signal to connected browser UI sessions
                 await manager.broadcast_refresh(str(workspace.id))
-                logger.info(f"Execution cycle completed: {processed_count} delegated tasks processed.")
+                logger.info(f"Execution cycle completed: {processed_count} tasks processed, {failed_count} tasks failed.")
 
         except Exception as e:
             logger.error(f"Error during execution cycle: {e}")

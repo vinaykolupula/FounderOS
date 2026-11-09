@@ -6,7 +6,18 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from sqlmodel import SQLModel
 from app.config import settings
-from app.models import Workspace, CompanyProfile, Connector, ActionItem, Decision, Evidence, AuditLog
+from app.models import (
+    Workspace,
+    CompanyProfile,
+    FounderProfile,
+    Connector,
+    ActionItem,
+    Decision,
+    Task,
+    Evidence,
+    AuditLog,
+    AIProviderSetting
+)
 
 config = context.config
 if config.config_file_name:

@@ -80,43 +80,38 @@ async def run_ingestion_cycle():
                 return
 
             incoming_signals = []
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                for connector in configured_connectors:
-                    try:
-                        # Decrypt token from vault for secure API access
-                        token = decrypt_token(connector.encrypted_oauth_token) if connector.encrypted_oauth_token else ""
-                        headers = {"Authorization": f"Bearer {token}"} if token else {}
-                        
-                        # Real HTTP call simulating provider API health check
-                        res = await client.get(f"https://httpbin.org/get?provider={connector.connector_id}", headers=headers)
-                        if res.status_code == 200:
-                            # Generate unique signals based on configured connector
-                            if connector.connector_id == "gmail":
-                                incoming_signals.append({
-                                    "title": f"Partner Email from Acme Corp {str(uuid.uuid4())[:4]}",
-                                    "content": "Acme is interested in upgrading to the enterprise tier. We need to schedule a call.",
-                                    "provider": "gmail",
-                                    "provenance": f"email_{uuid.uuid4()}",
-                                    "trustLevel": "high"
-                                })
-                            elif connector.connector_id == "linear":
-                                incoming_signals.append({
-                                    "title": f"High Priority Issue {str(uuid.uuid4())[:4]}",
-                                    "content": "Database latency spikes observed in the EU-West region during peak load.",
-                                    "provider": "linear",
-                                    "provenance": f"issue_{uuid.uuid4()}",
-                                    "trustLevel": "medium"
-                                })
-                            elif connector.connector_id == "slack":
-                                incoming_signals.append({
-                                    "title": f"Urgent Customer Escalation {str(uuid.uuid4())[:4]}",
-                                    "content": "Customer X reported login failures affecting 50 users.",
-                                    "provider": "slack",
-                                    "provenance": f"slack_{uuid.uuid4()}",
-                                    "trustLevel": "high"
-                                })
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch live signals for connector {connector.connector_id}: {e}")
+            for connector in configured_connectors:
+                try:
+                    # Verify token can be safely decrypted from vault (zero external transmission to public third parties)
+                    token = decrypt_token(connector.encrypted_oauth_token) if connector.encrypted_oauth_token else ""
+                    if connector.status == "configured":
+                        # Generate unique signals based on configured connector
+                        if connector.connector_id == "gmail":
+                            incoming_signals.append({
+                                "title": f"Partner Email from Acme Corp {str(uuid.uuid4())[:4]}",
+                                "content": "Acme is interested in upgrading to the enterprise tier. We need to schedule a call.",
+                                "provider": "gmail",
+                                "provenance": f"email_{uuid.uuid4()}",
+                                "trustLevel": "high"
+                            })
+                        elif connector.connector_id == "linear":
+                            incoming_signals.append({
+                                "title": f"High Priority Issue {str(uuid.uuid4())[:4]}",
+                                "content": "Database latency spikes observed in the EU-West region during peak load.",
+                                "provider": "linear",
+                                "provenance": f"issue_{uuid.uuid4()}",
+                                "trustLevel": "medium"
+                            })
+                        elif connector.connector_id == "slack":
+                            incoming_signals.append({
+                                "title": f"Urgent Customer Escalation {str(uuid.uuid4())[:4]}",
+                                "content": "Customer X reported login failures affecting 50 users.",
+                                "provider": "slack",
+                                "provenance": f"slack_{uuid.uuid4()}",
+                                "trustLevel": "high"
+                            })
+                except Exception as e:
+                    logger.warning(f"Failed to fetch live signals for connector {connector.connector_id}: {e}")
 
             # Fallback to mock signals if live API call is unconfigured
             if not incoming_signals:

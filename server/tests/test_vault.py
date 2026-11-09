@@ -40,6 +40,23 @@ class TestVaultEncryption(unittest.TestCase):
         decrypted = decrypt_token(encrypted)
         self.assertEqual(decrypted, plain)
 
+    def test_production_mode_enforces_secret_key(self):
+        old_env = os.environ.get("ENVIRONMENT")
+        old_key = os.environ.get("VAULT_SECRET_KEY")
+        try:
+            os.environ["ENVIRONMENT"] = "production"
+            if "VAULT_SECRET_KEY" in os.environ:
+                del os.environ["VAULT_SECRET_KEY"]
+            with self.assertRaises(RuntimeError):
+                _get_key()
+        finally:
+            if old_env is not None:
+                os.environ["ENVIRONMENT"] = old_env
+            else:
+                os.environ.pop("ENVIRONMENT", None)
+            if old_key is not None:
+                os.environ["VAULT_SECRET_KEY"] = old_key
+
 
 if __name__ == "__main__":
     unittest.main()

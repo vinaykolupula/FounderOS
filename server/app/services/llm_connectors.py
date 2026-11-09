@@ -28,6 +28,35 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger("founderos.llm.connectors")
 
+_client_pool: Optional[httpx.AsyncClient] = None
+_client_loop: Optional[asyncio.AbstractEventLoop] = None
+
+def get_shared_client() -> httpx.AsyncClient:
+    """Returns a pooled singleton httpx.AsyncClient configured with connection limits and keep-alive."""
+    global _client_pool, _client_loop
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _client_pool is None or _client_pool.is_closed or (_client_loop is not None and _client_loop != current_loop):
+        limits = httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=30.0)
+        _client_pool = httpx.AsyncClient(limits=limits, timeout=45.0)
+        _client_loop = current_loop
+    return _client_pool
+
+async def close_shared_client():
+    """Gracefully closes pooled connections upon application shutdown."""
+    global _client_pool, _client_loop
+    if _client_pool is not None and not _client_pool.is_closed:
+        try:
+            await _client_pool.aclose()
+        except Exception:
+            pass
+        finally:
+            _client_pool = None
+            _client_loop = None
+
 
 class BaseLLMConnector(ABC):
     """Abstract interface for all LLM provider connectors."""
@@ -141,16 +170,16 @@ class OpenAICompatibleConnector(BaseLLMConnector):
                 if any(k in model.lower() for k in ["o1", "o3", "sol", "luna"]):
                     payload.pop("temperature", None)
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
-            res = await client.post(endpoint, headers=headers, json=payload)
-            if res.status_code == 200:
-                data = res.json()
-                choices = data.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "")
-            logger.warning(f"OpenAI-Compatible API error ({base_url}) {res.status_code}: {res.text}")
-            return ""
+        client = get_shared_client()
+        endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
+        res = await client.post(endpoint, headers=headers, json=payload, timeout=timeout)
+        if res.status_code == 200:
+            data = res.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+        logger.warning(f"OpenAI-Compatible API error ({base_url}) {res.status_code}: {res.text}")
+        return ""
 
     async def discover_models(
         self,
@@ -165,21 +194,21 @@ class OpenAICompatibleConnector(BaseLLMConnector):
 
         endpoint = f"{base_url}/models" if not base_url.endswith("/models") else base_url
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                res = await client.get(endpoint, headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    items = data.get("data", []) or data.get("models", [])
-                    models = []
-                    for item in items:
-                        if isinstance(item, dict) and item.get("id"):
-                            models.append(item.get("id"))
-                        elif isinstance(item, dict) and item.get("name"):
-                            models.append(item.get("name"))
-                        elif isinstance(item, str):
-                            models.append(item)
-                    if models:
-                        return sorted(list(set(models)))
+            client = get_shared_client()
+            res = await client.get(endpoint, headers=headers, timeout=timeout)
+            if res.status_code == 200:
+                data = res.json()
+                items = data.get("data", []) or data.get("models", [])
+                models = []
+                for item in items:
+                    if isinstance(item, dict) and item.get("id"):
+                        models.append(item.get("id"))
+                    elif isinstance(item, dict) and item.get("name"):
+                        models.append(item.get("name"))
+                    elif isinstance(item, str):
+                        models.append(item)
+                if models:
+                    return sorted(list(set(models)))
         except Exception as e:
             logger.warning(f"Failed to auto-discover models from {endpoint}: {e}")
         return []
@@ -240,28 +269,28 @@ class AnthropicConnector(BaseLLMConnector):
             payload["max_tokens"] = budget_tokens + 4096
             payload.pop("temperature", None)  # Thinking mode requires default temperature
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            endpoint = f"{base_url}/messages"
-            res = await client.post(endpoint, headers=headers, json=payload)
-            if res.status_code == 200:
-                data = res.json()
-                content = data.get("content", [])
-                text_parts = [c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"]
-                return "".join(text_parts)
-            
-            # Fallback resilience (e.g. Claude Fable 5 with fallback or downgrade to Sonnet)
-            if "fallback" in model.lower() or res.status_code in [429, 500, 503]:
-                logger.warning(f"Anthropic model '{canonical_model}' failed ({res.status_code}), executing fallback to claude-sonnet-5...")
-                payload["model"] = "claude-sonnet-5"
-                payload.pop("thinking", None)
-                fb_res = await client.post(endpoint, headers=headers, json=payload)
-                if fb_res.status_code == 200:
-                    fb_data = fb_res.json()
-                    fb_content = fb_data.get("content", [])
-                    return "".join([c.get("text", "") for c in fb_content if isinstance(c, dict) and c.get("type") == "text"])
+        client = get_shared_client()
+        endpoint = f"{base_url}/messages"
+        res = await client.post(endpoint, headers=headers, json=payload, timeout=timeout)
+        if res.status_code == 200:
+            data = res.json()
+            content = data.get("content", [])
+            text_parts = [c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"]
+            return "".join(text_parts)
+        
+        # Fallback resilience (e.g. Claude Fable 5 with fallback or downgrade to Sonnet)
+        if "fallback" in model.lower() or res.status_code in [429, 500, 503]:
+            logger.warning(f"Anthropic model '{canonical_model}' failed ({res.status_code}), executing fallback to claude-sonnet-5...")
+            payload["model"] = "claude-sonnet-5"
+            payload.pop("thinking", None)
+            fb_res = await client.post(endpoint, headers=headers, json=payload, timeout=timeout)
+            if fb_res.status_code == 200:
+                fb_data = fb_res.json()
+                fb_content = fb_data.get("content", [])
+                return "".join([c.get("text", "") for c in fb_content if isinstance(c, dict) and c.get("type") == "text"])
 
-            logger.warning(f"Anthropic API error {res.status_code}: {res.text}")
-            return ""
+        logger.warning(f"Anthropic API error {res.status_code}: {res.text}")
+        return ""
 
     async def discover_models(
         self,
@@ -276,14 +305,14 @@ class AnthropicConnector(BaseLLMConnector):
             "content-type": "application/json"
         }
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                res = await client.get(f"{base_url}/models", headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    items = data.get("data", [])
-                    models = [item.get("id") for item in items if isinstance(item, dict) and item.get("id")]
-                    if models:
-                        return sorted(list(set(models)))
+            client = get_shared_client()
+            res = await client.get(f"{base_url}/models", headers=headers, timeout=timeout)
+            if res.status_code == 200:
+                data = res.json()
+                items = data.get("data", [])
+                models = [item.get("id") for item in items if isinstance(item, dict) and item.get("id")]
+                if models:
+                    return sorted(list(set(models)))
         except Exception as e:
             logger.warning(f"Anthropic model discovery failed: {e}")
 
@@ -320,7 +349,11 @@ class GeminiConnector(BaseLLMConnector):
         base_url = (custom_base_url.strip().rstrip("/") if custom_base_url else self.base_url)
         model_id = model or "gemini-3.7-flash"
 
-        url = f"{base_url}/models/{model_id}:generateContent?key={api_key}"
+        url = f"{base_url}/models/{model_id}:generateContent"
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["x-goog-api-key"] = api_key
+
         payload: Dict[str, Any] = {
             "contents": [{"parts": [{"text": f"{system_instruction}\n\nUser Prompt: {prompt}"}]}],
             "generationConfig": {"temperature": temperature}
@@ -331,17 +364,17 @@ class GeminiConnector(BaseLLMConnector):
         if effort in ["max", "xhigh", "high"]:
             payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 8192 if effort in ["max", "xhigh"] else 4096}
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            res = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
-            if res.status_code == 200:
-                data = res.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-            logger.warning(f"Gemini API error {res.status_code}: {res.text}")
-            return ""
+        client = get_shared_client()
+        res = await client.post(url, headers=headers, json=payload, timeout=timeout)
+        if res.status_code == 200:
+            data = res.json()
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "")
+        logger.warning(f"Gemini API error {res.status_code}: {res.text}")
+        return ""
 
     async def discover_models(
         self,
@@ -353,19 +386,20 @@ class GeminiConnector(BaseLLMConnector):
         if not api_key:
             return ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.1-pro", "gemini-2.0-flash"]
 
-        url = f"{base_url}/models?key={api_key}"
+        url = f"{base_url}/models"
+        headers = {"x-goog-api-key": api_key}
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                res = await client.get(url)
-                if res.status_code == 200:
-                    data = res.json()
-                    models = []
-                    for m in data.get("models", []):
-                        name = m.get("name", "").replace("models/", "")
-                        if "generateContent" in m.get("supportedGenerationMethods", []):
-                            models.append(name)
-                    if models:
-                        return sorted(list(set(models)))
+            client = get_shared_client()
+            res = await client.get(url, headers=headers, timeout=timeout)
+            if res.status_code == 200:
+                data = res.json()
+                models = []
+                for m in data.get("models", []):
+                    name = m.get("name", "").replace("models/", "")
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        models.append(name)
+                if models:
+                    return sorted(list(set(models)))
         except Exception as e:
             logger.warning(f"Gemini model discovery failed: {e}")
 
@@ -399,19 +433,20 @@ class OllamaConnector(BaseLLMConnector):
         base_url = self._get_base_url(custom_base_url)
         model_id = model or "deepseek-r1:latest"
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            res = await client.post(
-                f"{base_url}/api/generate",
-                json={
-                    "model": model_id,
-                    "prompt": f"{system_instruction}\n\nUser Prompt: {prompt}",
-                    "stream": False,
-                    "options": {"temperature": temperature}
-                }
-            )
-            if res.status_code == 200:
-                return res.json().get("response", "")
-            return ""
+        client = get_shared_client()
+        res = await client.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model_id,
+                "prompt": f"{system_instruction}\n\nUser Prompt: {prompt}",
+                "stream": False,
+                "options": {"temperature": temperature}
+            },
+            timeout=timeout
+        )
+        if res.status_code == 200:
+            return res.json().get("response", "")
+        return ""
 
     async def discover_models(
         self,
@@ -421,13 +456,13 @@ class OllamaConnector(BaseLLMConnector):
     ) -> List[str]:
         base_url = self._get_base_url(custom_base_url)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                res = await client.get(f"{base_url}/api/tags")
-                if res.status_code == 200:
-                    data = res.json()
-                    models = [m.get("name") for m in data.get("models", []) if m.get("name")]
-                    if models:
-                        return sorted(models)
+            client = get_shared_client()
+            res = await client.get(f"{base_url}/api/tags", timeout=timeout)
+            if res.status_code == 200:
+                data = res.json()
+                models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+                if models:
+                    return sorted(models)
         except Exception as e:
             logger.info(f"Local Ollama discovery offline ({base_url}): {e}")
 

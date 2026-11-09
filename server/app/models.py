@@ -46,6 +46,8 @@ class Workspace(WorkspaceBase, table=True):
     decisions: List["Decision"] = Relationship(back_populates="workspace")
     ai_settings: List["AIProviderSetting"] = Relationship(back_populates="workspace")
     tasks: List["Task"] = Relationship(back_populates="workspace")
+    users: List["User"] = Relationship(back_populates="workspace")
+    token_usages: List["TokenUsageLedger"] = Relationship(back_populates="workspace")
 
 
 # ==========================================
@@ -220,7 +222,7 @@ class ActionItemBase(SQLModel):
     title: str
     detail: str
     source: str
-    status: str = "Ready"  # 'Ready' | 'Draft' | 'Approved' | 'Executed'
+    status: str = Field(default="Ready", index=True)  # 'Ready' | 'Draft' | 'Approved' | 'Executed'
     action_type: Optional[str] = None
     payload: Optional[dict] = Field(default=None, sa_type=JSON)
 
@@ -241,8 +243,8 @@ class DecisionBase(SQLModel):
     decision_code: str  # e.g. '#024'
     title: str
     detail: str
-    status: str = "Open"  # 'Open' | 'Validated' | 'Learning'
-    review_date: Optional[datetime] = None
+    status: str = Field(default="Open", index=True)  # 'Open' | 'Validated' | 'Learning'
+    review_date: Optional[datetime] = Field(default=None, index=True)
     outcome: Optional[str] = None
 
 
@@ -280,7 +282,7 @@ class Evidence(EvidenceBase, table=True):
 
 class AuditLogBase(SQLModel):
     actor: str  # 'founder' | 'founderos_agent' | 'system'
-    event: str
+    event: str = Field(index=True)
     details: Optional[dict] = Field(default=None, sa_type=JSON)
 
 
@@ -288,7 +290,7 @@ class AuditLog(AuditLogBase, table=True):
     """Immutable audit trail logging founder approvals, setting changes, and agent actions."""
     id: Optional[int] = Field(default=None, primary_key=True)
     workspace_id: int = Field(foreign_key="workspace.id", index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 
 # ==========================================
@@ -336,3 +338,59 @@ class Task(TaskBase, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     workspace: Optional[Workspace] = Relationship(back_populates="tasks")
+
+
+# ==========================================
+# User, Authentication & Role-Based Access
+# ==========================================
+
+class UserRole(str, Enum):
+    OWNER = "OWNER"
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"
+    VIEWER = "VIEWER"
+
+
+class UserBase(SQLModel):
+    email: str = Field(unique=True, index=True)
+    full_name: Optional[str] = "Founder"
+    role: str = Field(default=UserRole.OWNER.value)
+    is_active: bool = Field(default=True)
+
+
+class User(UserBase, table=True):
+    """User account entity associated with a tenant workspace for RBAC authentication."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    hashed_password: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    workspace: Optional[Workspace] = Relationship(back_populates="users")
+
+
+# ==========================================
+# Token Usage & Observability Telemetry Ledger
+# ==========================================
+
+class TokenUsageLedgerBase(SQLModel):
+    provider: str = Field(index=True)
+    model: str = Field(index=True)
+    call_type: str = Field(default="general", index=True)
+    prompt_tokens: int = Field(default=0)
+    completion_tokens: int = Field(default=0)
+    reasoning_tokens: int = Field(default=0)
+    latency_ms: float = Field(default=0.0)
+    estimated_cost_usd: float = Field(default=0.0)
+
+
+class TokenUsageLedger(TokenUsageLedgerBase, table=True):
+    """
+    Chronological record of AI inference requests, token counts, latency, and estimated cost.
+    Enables real-time observability of provider burn rates and model ROI.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+    workspace: Optional[Workspace] = Relationship(back_populates="token_usages")
+

@@ -13,8 +13,33 @@ from sqlalchemy import func
 from sqlmodel import select, delete
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from datetime import datetime
 from app.db import get_async_session
-from app.models import Workspace, CompanyProfile, FounderProfile, Connector, ActionItem, Decision, AuditLog, Task, Evidence, BusinessModelEnum, PlatformFocusEnum, FundingStateEnum, RevenueRangeEnum, StageEnum, TeamSizeEnum, FounderRole, FounderBackground, ExperienceLevel, FounderSuperpower
+from app.auth import get_current_workspace
+from app.models import (
+    Workspace,
+    CompanyProfile,
+    FounderProfile,
+    Connector,
+    ActionItem,
+    Decision,
+    AuditLog,
+    Task,
+    Evidence,
+    AIProviderSetting,
+    User,
+    TokenUsageLedger,
+    BusinessModelEnum,
+    PlatformFocusEnum,
+    FundingStateEnum,
+    RevenueRangeEnum,
+    StageEnum,
+    TeamSizeEnum,
+    FounderRole,
+    FounderBackground,
+    ExperienceLevel,
+    FounderSuperpower,
+)
 
 router = APIRouter(prefix="/api", tags=["Workspace"])
 
@@ -39,6 +64,10 @@ class CompanyUpdateSchema(BaseModel):
     primaryMetric: str = Field(..., max_length=500)
     primaryConstraint: str = Field(..., max_length=500)
     runwayMonths: int = Field(..., ge=0, le=120)
+    burnRate: Optional[str] = Field("Unknown", max_length=100)
+    gtmMotion: Optional[str] = Field("Product-Led Growth", max_length=100)
+    techStack: Optional[str] = Field("React, Node.js, Postgres", max_length=500)
+    competitiveMoat: Optional[str] = Field("First mover advantage", max_length=500)
 
 
 class FounderUpdateSchema(BaseModel):
@@ -50,6 +79,9 @@ class FounderUpdateSchema(BaseModel):
     superpower: FounderSuperpower
     primaryGap: FounderSuperpower
     learningFocus: str = Field(..., max_length=500)
+    communicationStyle: Optional[str] = Field("Direct and brief", max_length=255)
+    energyState: Optional[str] = Field("Steady pace", max_length=255)
+    coreValues: Optional[str] = Field("Speed, Customer Obsession", max_length=500)
 
 class OnboardingSchema(BaseModel):
     company: CompanyUpdateSchema
@@ -61,14 +93,14 @@ class NewDecisionSchema(BaseModel):
     title: str = Field(..., max_length=255)
     detail: str = Field(..., max_length=2000)
     status: Optional[str] = "Open"
+    reviewDate: Optional[datetime] = None
 
 
 @router.get("/workspace")
-async def get_workspace(session: AsyncSession = Depends(get_async_session)):
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+async def get_workspace(
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
 
     company_res = await session.execute(select(CompanyProfile).where(CompanyProfile.workspace_id == workspace.id))
     company = company_res.scalars().first()
@@ -177,7 +209,28 @@ async def complete_onboarding(payload: OnboardingSchema, session: AsyncSession =
     c_res = await session.execute(select(CompanyProfile).where(CompanyProfile.workspace_id == workspace.id))
     company = c_res.scalars().first()
     if not company:
-        company = CompanyProfile(workspace_id=workspace.id, **payload.company.model_dump())
+        company = CompanyProfile(
+            workspace_id=workspace.id,
+            name=payload.company.name,
+            website_url=payload.company.websiteUrl,
+            linkedin_url=payload.company.linkedinUrl,
+            social_url=payload.company.socialUrl,
+            business_model=payload.company.businessModel,
+            platform_focus=payload.company.platformFocus,
+            funding_state=payload.company.fundingState,
+            revenue_range=payload.company.revenueRange,
+            stage=payload.company.stage,
+            team_size=payload.company.teamSize,
+            ideal_customer=payload.company.idealCustomer,
+            objective=payload.company.objective,
+            primary_metric=payload.company.primaryMetric,
+            primary_constraint=payload.company.primaryConstraint,
+            runway_months=payload.company.runwayMonths,
+            burn_rate=payload.company.burnRate or "Unknown",
+            gtm_motion=payload.company.gtmMotion or "Product-Led Growth",
+            tech_stack=payload.company.techStack or "React, Node.js, Postgres",
+            competitive_moat=payload.company.competitiveMoat or "First mover advantage"
+        )
     else:
         company.name = payload.company.name
         company.website_url = payload.company.websiteUrl
@@ -216,6 +269,9 @@ async def complete_onboarding(payload: OnboardingSchema, session: AsyncSession =
             superpower=payload.founder.superpower,
             primary_gap=payload.founder.primaryGap,
             learning_focus=payload.founder.learningFocus,
+            communication_style=getattr(payload.founder, 'communicationStyle', "Direct and brief"),
+            energy_state=getattr(payload.founder, 'energyState', "Steady pace"),
+            core_values=getattr(payload.founder, 'coreValues', "Speed, Customer Obsession")
         )
     else:
         founder_profile.name = payload.founder.name
@@ -331,18 +387,30 @@ async def update_founder(payload: FounderUpdateSchema, session: AsyncSession = D
 
 
 @router.post("/actions/{action_id}/approve")
-async def approve_action(action_id: int, session: AsyncSession = Depends(get_async_session)):
-    result = await session.execute(select(ActionItem).where(ActionItem.id == action_id))
+async def approve_action(
+    action_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await session.execute(
+        select(ActionItem).where(ActionItem.id == action_id, ActionItem.workspace_id == workspace.id)
+    )
     action = result.scalars().first()
     if not action:
-        raise HTTPException(status_code=404, detail="Action item not found")
-
-    action.status = "Approved"
-    session.add(action)
+        raise HTTPException(status_code=404, detail="Action item not found in current workspace")
 
     # Dispatch action via live platforms dispatcher
     from app.services.dispatchers import ActionDispatcher
     dispatch_res = await ActionDispatcher.dispatch_approved_action(action.id, action.title, action.detail, action.source, session)
+
+    if not dispatch_res.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=dispatch_res.get("reason", "Action dispatch failed safety or idempotency policy")
+        )
+
+    action.status = "Approved"
+    session.add(action)
 
     audit = AuditLog(
         workspace_id=action.workspace_id,
@@ -395,10 +463,12 @@ async def configure_connector(connector_id: str, session: AsyncSession = Depends
 
 
 @router.post("/decisions")
-async def create_decision(payload: NewDecisionSchema, session: AsyncSession = Depends(get_async_session)):
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
+async def create_decision(
+    payload: NewDecisionSchema,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     # Fast indexed count
@@ -411,7 +481,8 @@ async def create_decision(payload: NewDecisionSchema, session: AsyncSession = De
         decision_code=next_code,
         title=payload.title,
         detail=payload.detail,
-        status=payload.status or "Open"
+        status=payload.status or "Open",
+        review_date=payload.reviewDate
     )
     session.add(decision)
     await session.commit()
@@ -420,13 +491,11 @@ async def create_decision(payload: NewDecisionSchema, session: AsyncSession = De
     return {"message": "Decision record created", "decision": decision}
 
 @router.delete("/workspace")
-async def reset_workspace(session: AsyncSession = Depends(get_async_session)):
+async def reset_workspace(
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """Deletes all workspace data securely to reset the system."""
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-
     assert workspace.id is not None
     wid = workspace.id
 
@@ -439,6 +508,9 @@ async def reset_workspace(session: AsyncSession = Depends(get_async_session)):
     await session.execute(delete(Evidence).where(Evidence.workspace_id == wid))
     await session.execute(delete(AuditLog).where(AuditLog.workspace_id == wid))
     await session.execute(delete(Connector).where(Connector.workspace_id == wid))
+    await session.execute(delete(AIProviderSetting).where(AIProviderSetting.workspace_id == wid))
+    await session.execute(delete(User).where(User.workspace_id == wid))
+    await session.execute(delete(TokenUsageLedger).where(TokenUsageLedger.workspace_id == wid))
 
     # Re-seed default connectors in pristine unconfigured state
     default_connectors = [

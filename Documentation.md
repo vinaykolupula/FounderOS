@@ -180,7 +180,7 @@ Only after approval should a production system execute it and store a receipt in
 
 ## Implemented Full-Stack Architecture
 
-FounderOS is a complete full-stack software application with a FastAPI async backend, SQLModel database persistence, AES-256-GCM credential vault, and an interactive React 18 TypeScript frontend command cockpit.
+FounderOS is a complete full-stack software application with a FastAPI async backend, SQLModel database persistence, AES-256-GCM credential vault, and an interactive React 18 TypeScript frontend command cockpit with modular views and modals.
 
 ### 1. 👑 C-Suite Daily Executive Operating Suite
 - **CEO Investor Update Synthesizer**: Automatically digests company stage, monthly milestones, MRR growth, and constraints into gold-standard YC/Sequoia monthly investor updates. Can be copied or staged to the draft action queue with 1 click.
@@ -190,15 +190,36 @@ FounderOS is a complete full-stack software application with a FastAPI async bac
 - **📈 CRO MEDDPICC Deal Health Radar**: Audits enterprise pipeline deals across 8 qualification vectors (Metrics, Economic Buyer, Decision Criteria/Process, Paper Process, Pain, Champion, Competition) with objection talk tracks.
 - **🎯 VP CS Superhuman PMF Engine**: Ingests user survey responses, calculates PMF score against Rahul Vohra's 40% "Very Disappointed" threshold, and segments High-Expectation Customers (HXC).
 
-### 2. 🏛️ Multi-Agent Board Debate Matrix
-- Concurrently queries 6 C-suite executive personas (**CRO**, **Skeptic / CPO**, **VP CS**, **CFO**, **CTO**, **COO**), synthesized by a **CEO Orchestrator** into a single strategic consensus with a 2-Week Minimum Viable Experiment (MVE).
-- Operates with 12 Frontier LLM connectors (Claude Opus/Fable 5, GPT-5.6 Sol/Luna, Grok 4.6, Kimi K3, Gemini 3.7 Flash, DeepSeek V4 Pro, GLM-5.2, Nemotron 3 Ultra, Muse Spark 1.2) with dynamic `/v1/models` discovery, and 100% offline local structured reasoning fallback.
+### 2. 🏛️ Authentic 2-Round Multi-Agent Board Debate Matrix & Live Streaming
+- **Round 1 (Stance Formulation)**: 6 C-suite executive personas (**CRO**, **Skeptic / CPO**, **VP CS**, **CFO**, **CTO**, **COO**) independently formulate strategic perspectives grounded in startup frameworks.
+- **Round 2 (Dialectic Cross-Examination)**: Personas engage in direct rebuttals across 3 organizational tension pairs (Skeptic vs. CTO, CFO vs. CRO, VP CS vs. COO).
+- **Round 3 (CEO Synthesis)**: Synthesizes consensus (`STRONG GO`, `CONDITIONAL GO`, `HIGH RISK / PAUSE`), One Metric That Matters (OMTM), a 2-Week Minimum Viable Experiment (MVE), and explicit failure kill criteria.
+- **Real-Time SSE Streaming (`GET /api/debate/stream`)**: Streams perspectives live as they materialize via Server-Sent Events, eliminating static waiting spinners.
+- **Universal Provider Gateway**: Operates across 12 Frontier LLM connectors with live `/v1/models` discovery, connection pooling, and 100% offline local structured reasoning fallback.
 
-### 3. 🛡️ Security, Governance & Action Policy
+### 3. 📊 AI Observability, Token Ledger & Cost Accounting
+- **Live AI Token Burn & Cost Ledger**: Chronologically tracks token consumption (prompt, completion, reasoning), execution latency (ms), and estimated financial costs ($ USD) across OpenAI, Anthropic, Gemini, DeepSeek, Groq, and Ollama.
+- **Cockpit Observability Dashboard**: Live stat cards in the UI displaying total spend, total tokens, total inferences, average latency, and provider breakdowns (`GET /api/observability/usage`).
+
+### 4. 🔐 Multi-Tenant Authentication & Role-Based Access Control (RBAC)
+- **PBKDF2 Password Hashing**: Standards-compliant PBKDF2-HMAC-SHA256 password hashing (100,000 iterations, 16-byte cryptographic salt).
+- **HMAC-SHA256 JWT Engine**: Cryptographically signed access tokens with 7-day expiration.
+- **RBAC Guard (`require_role`)**: Granular authorization supporting `OWNER`, `ADMIN`, `MEMBER`, and `VIEWER` roles.
+- **Tenant Workspace Scoping**: Automatic tenant isolation (`get_current_workspace`) mapping authenticated users to their isolated workspace.
+
+### 5. 🛡️ Security, Governance & Sandboxed Execution
 - **Tri-Modal Security Postures**: `Strict` (100% human-in-the-loop), `Auto` (default, prompt injection screening with auto-staging), and `Dangerous` (autonomous execution).
+- **Sandboxed Tool Execution Guard (`ExecutionSandbox`)**: Enforces subprocess isolation, automatic environment variable scrubbing (`AWS_*`, `VAULT_*`, `*_SECRET`, `*_KEY`), strict 5-second execution timeouts, and 64KB memory caps.
 - **Action Safety Policy Filter**: Intercepts destructive shell, SQL, git force push, and secret exposure attempts.
-- **AES-256-GCM Vault**: Encrypted credential storage for API keys and OAuth tokens.
+- **AES-256-GCM Vault**: Encrypted credential storage with 0600 file permission enforcement for `.vault_key`.
+- **OAuth 2.0 CSRF Protection**: HMAC-SHA256 signed state nonces with 10-minute TTL.
 - **Approval-Gated Execution**: All autonomous task outputs are created as draft `ActionItem` objects awaiting founder sign-off before dispatch.
+
+### 6. ⚡ Infrastructure, Concurrency & Data Persistence
+- **SQLite WAL Mode**: Configured with `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` to eliminate database locking under concurrent background worker execution.
+- **Distributed Broadcast Bus**: `RedisBroadcastBackend` for horizontal multi-worker cluster scaling with automatic graceful fallback to `InMemoryBroadcastBackend`.
+- **384-Dimensional Subword Semantic Vectorizer**: RAG embedding pipeline using subword character 3/4-grams and logarithmic TF weighting for high-precision business synonym retrieval.
+- **Alembic Migration Pipeline**: Relational schema evolution tracked via versioned migration ledgers (`server/alembic/versions/`).
 
 ---
 
@@ -220,12 +241,13 @@ cd server
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+PYTHONPATH=. ./venv/bin/alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Run Automated Test Suite
+### 3. Run Automated Test Suite (100% Offline)
 ```bash
-PYTHONPATH=server ./server/venv/bin/python -m unittest discover -s server/tests -p "test_*.py"
+PYTHONPATH=server ./server/venv/bin/python -m unittest discover -s server/tests -p "test_*.py" -v
 ```
 
 ---

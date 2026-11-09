@@ -48,6 +48,9 @@ htmlcov/
 .env.*
 server/.env
 server/.env.*
+.vault_key
+server/.vault_key
+*.vault_key
 !.env.example
 !server/.env.example
 *.pem

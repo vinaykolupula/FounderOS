@@ -21,10 +21,11 @@ The FounderOS Agent Harness is designed around a core principle:
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                          2. HARNESS PROCESSING LAYER                            │
 │ • 6-Domain Playbook Selector (Sales, Tech, Ops, PMF, Finance, Hiring)          │
-│ • 6-Persona C-Suite Mental Models (CRO, Skeptic, VP CS, CFO, CTO, COO)         │
-│ • CEO Synthesis Engine (OMTM, High-Output Leverage, Two-Way Door Decisions)     │
+│ • 2-Round Dialectic Board Debate (Round 1: Stances -> Round 2: Rebuttals)       │
+│ • CEO Orchestration Synthesis (OMTM, High-Output Leverage, 2-Week MVE)          │
 │ • Tri-Modal Security Posture (Strict, Auto, Dangerous)                          │
 │ • Action Safety Policy Engine (AST / Regex Safety Denylist)                     │
+│ • Sandboxed Tool Execution Guard (ExecutionSandbox, Env Scrubbing, 5s Timeout)  │
 │ • Goal Completion Audit (Evidence Verification & Multi-Round Impasse Check)     │
 └────────────────────────────────────────┬────────────────────────────────────────┘
                                          │
@@ -32,15 +33,18 @@ The FounderOS Agent Harness is designed around a core principle:
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                        3. LLM REASONING & LOCAL FALLBACK                        │
 │ • Unified Cloud LLMEngine (OpenAI, Google Gemini, Anthropic Claude, Ollama)     │
+│ • Real-Time Server-Sent Events (SSE) Streaming Gateway (/api/debate/stream)     │
 │ • Peak Local Fallback Structured Reasoning Engine (100% Offline Heuristics)    │
+│ • AI Observability & Cost Accounting Engine (TokenUsageLedger, Pricing Catalog) │
 └────────────────────────────────────────┬────────────────────────────────────────┘
                                          │
                                          ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                         4. STRUCTURED EXECUTIVE OUTPUTS                         │
 │ • CEO Morning Briefing         • 2-Week Minimum Viable Experiment (MVE)         │
-│ • Key Executive Tradeoff       • Approval-Gated ActionItem Draft                │
-│ • Immutable Audit Log Record   • Scoped Notebook Memory Fact Update             │
+│ • Key Executive Tradeoff       • Explicit Pre-Mortem Failure Kill Criteria      │
+│ • Approval-Gated Action Draft  • Immutable Audit Log Record                     │
+│ • Scoped Notebook Fact Update  • Live Token Burn & Latency Telemetry            │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -78,34 +82,59 @@ Adapts agent tone, depth, and domain focus to the founder's personal capabilitie
 
 ---
 
-## 3. Executive Board 6-Agent C-Suite Mental Models
+## 3. Authentic 2-Round Multi-Agent Board Debate Dialectic
 
-When evaluating strategic choices via the **Multi-Agent Executive Debate**, 6 specialized personas analyze the decision concurrently using established startup frameworks:
+FounderOS implements a multi-agent dialectic debate protocol (`server/app/services/llm.py`):
 
 ```
-                  ┌───────────────────────────────────────────────────────────┐
-                  │                 CEO Orchestration Lens                    │
-                  │   Frameworks: One Metric That Matters & High Output Mgmt  │
-                  └─────────────────────────────┬─────────────────────────────┘
-                                                │
-        ┌──────────────────┬────────────────────┼────────────────────┬──────────────────┐
-        ▼                  ▼                    ▼                    ▼                  ▼
-┌──────────────┐   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐   ┌──────────────┐
-│  CRO Persona │   │Skeptic / CPO │     │VP CS Persona │     │ CFO Persona  │   │ COO Persona  │
-│  Reforge &   │   │ Pre-Mortem & │     │PMF Engine &  │     │Default Alive │   │ Barrels &    │
-│  MEDDPICC    │   │  Superhuman  │     │  TTFV & NRR  │     │& Burn Mult.  │   │  Ammunition  │
-└──────────────┘   └──────────────┘     └──────────────┘     └──────────────┘   └──────────────┘
-        │                                                                               │
-        └───────────────────────────────────────┬───────────────────────────────────────┘
-                                                ▼
-                                     ┌─────────────────────┐
-                                     │     CTO Persona     │
-                                     │  Boring Tech Rule & │
-                                     │  Two-Way Doors      │
-                                     └─────────────────────┘
+ROUND 1: Independent Stances
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│   CRO    │ │ Skeptic  │ │  VP CS   │ │   CFO    │ │   CTO    │ │   COO    │
+│ Reforge  │ │Pre-Mortem│ │Superhuman│ │ Default  │ │  Boring  │ │Barrels & │
+│ MEDDPICC │ │ Friction │ │PMF Engine│ │Alive/Burn│ │Technology│ │Ammunition│
+└────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+     │            │            │            │            │            │
+     ▼            ▼            ▼            ▼            ▼            ▼
+ROUND 2: Dialectic Cross-Examination (Organizational Tensions)
+┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────┐
+│     Skeptic vs. CTO     │  │       CFO vs. CRO       │  │     VP CS vs. COO       │
+│ Pre-Mortem Fragility vs.│  │ Runway & Burn Mult. vs.│  │ TTFV & NRR vs. Barrel   │
+│ Two-Way Door Reversibility││ Pipeline Growth Loops   │  │ Execution Bandwidth     │
+└────────────┬────────────┘  └────────────┬────────────┘  └────────────┬────────────┘
+             │                            │                            │
+             └────────────────────────────┼────────────────────────────┘
+                                          ▼
+ROUND 3: CEO Orchestrator Synthesis
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ • Consensus Rating: STRONG GO | CONDITIONAL GO | HIGH RISK / PAUSE                │
+│ • One Metric That Matters (OMTM) Traction Impact                                  │
+│ • 2-Week Minimum Viable Experiment (MVE)                                          │
+│ • Explicit Failure Kill Criteria (Pre-Mortem Trigger)                             │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Personas & Framework Matrix
+### 3.1 The Three Dialectic Tension Pairs (Round 2)
+1. **Skeptic vs. CTO (Operational Fragility vs. Engineering Velocity)**:
+   - *Skeptic*: Probes Gary Klein pre-mortem failure modes 6 months into the future.
+   - *CTO*: Defends reversible two-way doors and Dan McKinley innovation token discipline.
+2. **CFO vs. CRO (Capital Preservation vs. Growth Acceleration)**:
+   - *CFO*: Guards Paul Graham default alive status and keeps burn multiple under 1.5x.
+   - *CRO*: Defends ARR velocity, Reforge compounding growth loops, and MEDDPICC qualification.
+3. **VP CS vs. COO (Customer Retention vs. Operational Bandwidth)**:
+   - *VP CS*: Evaluates Rahul Vohra Superhuman PMF engine thresholds, TTFV (< 5m), and NRR (> 110%).
+   - *COO*: Evaluates Keith Rabois Barrels & Ammunition leadership bandwidth and cross-functional drag.
+
+### 3.2 Real-Time Server-Sent Events (SSE) Streaming Protocol
+- **Endpoint**: `GET /api/debate/stream?decisionTitle={title}&decisionDetail={detail}`
+- **Response Format**: `text/event-stream` with strict SSE framing:
+  - `event: round1_start` -> Initiates independent position formulation.
+  - `event: round1_persona` (x6) -> Streams each C-suite executive stance (`cro`, `skeptic`, `vp_cs`, `cfo`, `cto`, `coo`).
+  - `event: round2_start` -> Initiates cross-examination dialectic.
+  - `event: round2_dialectic` (x3) -> Streams dialectic tension critiques.
+  - `event: round3_start` -> Initiates CEO orchestrator synthesis.
+  - `event: debate_complete` -> Full structured payload delivered.
+
+### 3.3 Personas & Framework Matrix
 
 | Persona | Framework & Mental Model | Core Evaluation Question | Tracked Metric / Heuristic |
 |---|---|---|---|
@@ -115,13 +144,13 @@ When evaluating strategic choices via the **Multi-Agent Executive Debate**, 6 sp
 | **CFO (Capital & Strategy)**| **Paul Graham's Default Alive & Burn Multiple**| *Is the startup default alive? How does this shift cash zero-date and burn rate?* | Burn Multiple (< 1.5x) & Cash Runway |
 | **CTO (Technical Architect)**| **Dan McKinley's Boring Tech & Two-Way Doors**| *Is this a reversible Two-Way Door? Does it spend unnecessary innovation tokens?* | Engineering Velocity & SLA Uptime |
 | **COO (Operational Rigor)** | **Keith Rabois's Barrels/Ammo & Andy Grove LNO**| *Do we have the barrel capacity to execute without creating cross-functional drag?* | Operational Velocity & Bottleneck Queue |
-| **CEO (Orchestrator)** | **One Metric That Matters (OMTM) & MVE** | *What is the Minimum Viable Experiment (MVE) to test this safely in 2 weeks?* | CEO Consensus Rating & Trade-off |
+| **CEO (Orchestrator)** | **One Metric That Matters (OMTM) & MVE** | *What is the Minimum Viable Experiment (MVE) to test this safely in 2 weeks?* | CEO Consensus Rating & Kill Criteria |
 
 ---
 
-## 4. YC QM-Inspired Security Postures & Policy Engine
+## 4. YC QM-Inspired Security Postures & Sandboxed Execution
 
-FounderOS adopts Y Combinator's tri-modal security model to protect startup data:
+FounderOS adopts Y Combinator's tri-modal security model with subprocess isolation:
 
 1. **Tri-Modal Security Postures (`server/app/policy/action_policy.py`)**:
    - **`Strict`**: Every single tool action and draft item pauses for explicit human-in-the-loop sign-off.
@@ -130,10 +159,16 @@ FounderOS adopts Y Combinator's tri-modal security model to protect startup data
 
 2. **Action Safety Policy Engine**:
    - Scans actions, payloads, and queries to intercept dangerous operations:
-     - **Hard Deny**: Fork bombs (`:(){ :|:& };:`), destructive filesystem formats (`mkfs`).
+     - **Hard Deny**: Fork bombs (`:(){ :|:& };:`), destructive filesystem formats (`mkfs`), destructive block devices (`dd if=`).
      - **Approval Required**: Recursive file deletion (`rm -rf`), remote force pushes (`git push -f`), destructive table drops (`DROP TABLE`), pipe-to-shell (`curl | sh`), and raw API credential exposure.
 
-3. **Goal Completion & Impasse Verification Discipline (`server/app/workers/execution.py`)**:
+3. **Sandboxed Tool Execution Guard (`ExecutionSandbox` - SEC-07)**:
+   - **Subprocess Isolation**: Runs tool commands via isolated asynchronous subprocesses (`asyncio.create_subprocess_exec` / `create_subprocess_shell`).
+   - **Environment Variable Scrubbing**: Strips all sensitive credentials (`AWS_*`, `VAULT_*`, `FOUNDEROS_*`, `*_SECRET`, `*_KEY`, `*_TOKEN`, `DATABASE_URL`) from the execution environment.
+   - **Strict Execution Timeout**: Enforces a 5.0-second execution deadline with automatic process termination (`kill`) upon timeout.
+   - **Memory & Output Bounds**: Caps stdout and stderr capture at 64KB (`MAX_OUTPUT_BYTES = 65536`) to protect system memory.
+
+4. **Goal Completion & Impasse Verification Discipline (`server/app/workers/execution.py`)**:
    - Treats completion as unproven until concrete requirements are derived and output artifacts are generated.
    - Requires 3 consecutive rounds of the same roadblock before declaring an autonomous task `FAILED`.
 
@@ -160,7 +195,7 @@ FounderOS functions 100% offline out-of-the-box without requiring paid API keys.
 When no LLM API key is present:
 1. `LLMEngine` detects missing credentials and activates the **Peak Local Structured Reasoning Harness**.
 2. The harness pulls live company context from the database (`CompanyProfile` & `FounderProfile`).
-3. It constructs structured, framework-grounded executive debate responses and draft action items tailored specifically to the company's real metrics (`burnRate`, `gtmMotion`, `techStack`, `competitiveMoat`, `objective`, `primaryConstraint`).
+3. It constructs structured, framework-grounded executive debate responses (Round 1, Round 2 Dialectic, Round 3 CEO Synthesis) and draft action items tailored specifically to the company's real metrics (`burnRate`, `gtmMotion`, `techStack`, `competitiveMoat`, `objective`, `primaryConstraint`).
 
 ---
 
@@ -176,4 +211,3 @@ FounderOS provides specialized domain playbooks and calculation engines for dail
 | **💻 CTO** | `TechnicalRfcService` (`server/app/services/technical_rfc.py`) | Gary Klein Pre-Mortem & Dan McKinley Boring Tech | 6-month prospective failure modes & ADR records |
 | **📈 CRO** | `DealInspectionService` (`server/app/services/deal_radar.py`) | 8-Dimension MEDDPICC Enterprise Qualification | Pipeline deal health score (0-100) & objection scripts |
 | **🎯 VP CS** | `PMFEngineService` (`server/app/services/pmf_engine.py`) | Rahul Vohra's Superhuman 40% PMF Engine | % 'Very Disappointed' score & High-Expectation Customer segmentation |
-

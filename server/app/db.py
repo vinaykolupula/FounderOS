@@ -6,17 +6,38 @@ FastAPI session dependency injections, and default workspace seeding.
 """
 
 from typing import AsyncGenerator
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlmodel import SQLModel, select
 from app.config import settings
 from app.models import Workspace, CompanyProfile, FounderProfile, Connector, ActionItem, Decision
 
-# 1. Create Async SQLAlchemy Engine (SQLite + aiosqlite or PostgreSQL + asyncpg)
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    future=True,
-)
+# 1. Create Async SQLAlchemy Engine with Concurrency Optimizations
+if "sqlite" in settings.DATABASE_URL:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        future=True,
+        connect_args={"timeout": 30.0},
+    )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000")
+        cursor.close()
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        future=True,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+    )
 
 # 2. Asynchronous Session Factory
 async_session_maker = async_sessionmaker(

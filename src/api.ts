@@ -11,17 +11,44 @@
 import { type CompanyProfile, type FounderProfile, type ConnectorId, type Workspace } from './domain'
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000/api'
-const DEFAULT_TIMEOUT_MS = 8000
+const DEFAULT_TIMEOUT_MS = 15000 // 15s for standard CRUD
+const AI_TIMEOUT_MS = 60000 // 60s for multi-agent LLM reasoning
 
 /**
- * Utility wrapper around `fetch` adding an automatic abort timeout.
+ * Helper to retrieve client-stored auth credentials for multi-tenant requests.
  */
-async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {}
+  const jwt = localStorage.getItem('founderos_jwt_token')
+  if (jwt) {
+    headers['Authorization'] = `Bearer ${jwt}`
+  }
+  const token = localStorage.getItem('founderos_api_key')
+  if (token) {
+    headers['X-FounderOS-Key'] = token
+  }
+  return headers
+}
+
+/**
+ * Utility wrapper around `fetch` adding an automatic abort timeout and auth headers.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    const authHeaders = getAuthHeaders()
+    const mergedHeaders = {
+      ...authHeaders,
+      ...(options.headers || {}),
+    }
     const res = await fetch(url, {
       ...options,
+      headers: mergedHeaders,
       signal: controller.signal,
     })
     return res
@@ -253,7 +280,7 @@ export async function fetchGoogleAuthUrl(): Promise<string | null> {
  */
 export async function generateDynamicBrief(): Promise<any> {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/brief/generate`, { method: 'POST' })
+    const res = await fetchWithTimeout(`${API_BASE}/brief/generate`, { method: 'POST' }, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Request failed to generate CEO brief')
@@ -273,7 +300,7 @@ export async function triggerExecutiveDebate(decisionTitle: string): Promise<any
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ decisionTitle }),
-    })
+    }, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to trigger executive debate')
@@ -282,6 +309,79 @@ export async function triggerExecutiveDebate(decisionTitle: string): Promise<any
   } catch (err) {
     throw err
   }
+}
+
+/**
+ * Streams Multi-Agent Executive Board debate in real-time via Server-Sent Events (SSE).
+ */
+export async function streamExecutiveDebate(
+  decisionTitle: string,
+  onEvent: (eventType: string, data: any) => void,
+  signal?: AbortSignal
+): Promise<any> {
+  const url = `${API_BASE}/debate/stream?decisionTitle=${encodeURIComponent(decisionTitle)}`
+  const headers = getAuthHeaders()
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...headers,
+      'Accept': 'text/event-stream',
+    },
+    signal,
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.detail || 'Failed to initiate executive debate stream')
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Streaming response body not available')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult: any = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n\n')
+    buffer = lines.pop() || ''
+
+    for (const chunk of lines) {
+      if (!chunk.trim()) continue
+      let eventType = 'message'
+      let dataStr = ''
+
+      const chunkLines = chunk.split('\n')
+      for (const line of chunkLines) {
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim()
+        } else if (line.startsWith('data:')) {
+          dataStr = line.slice(5).trim()
+        }
+      }
+
+      if (dataStr) {
+        try {
+          const parsedData = JSON.parse(dataStr)
+          if (eventType === 'debate_complete') {
+            finalResult = parsedData
+          }
+          onEvent(eventType, parsedData)
+        } catch (e) {
+          console.warn('Failed to parse SSE data chunk:', dataStr)
+        }
+      }
+    }
+  }
+
+  return finalResult
 }
 
 /**
@@ -362,7 +462,7 @@ export async function testModelConnection(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerName, selectedModel, apiKey, customBaseUrl, reasoningEffort }),
-    })
+    }, AI_TIMEOUT_MS)
     if (!res.ok) return { success: false, status: 'Server Error' }
     return await res.json()
   } catch {
@@ -383,7 +483,7 @@ export async function discoverProviderModels(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerName, apiKey, customBaseUrl }),
-    })
+    }, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to discover models')
@@ -462,7 +562,7 @@ export async function updateBackendTask(taskId: number, payload: any): Promise<b
  */
 export async function delegateBackendTask(taskId: number): Promise<any> {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/tasks/${taskId}/delegate`, { method: 'POST' })
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/${taskId}/delegate`, { method: 'POST' }, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to delegate task')
@@ -478,7 +578,7 @@ export async function delegateBackendTask(taskId: number): Promise<any> {
  */
 export async function scanAgentTasks(): Promise<any[]> {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/tasks/scan`, { method: 'POST' })
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/scan`, { method: 'POST' }, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to scan agent tasks')
@@ -494,7 +594,7 @@ export async function scanAgentTasks(): Promise<any[]> {
  */
 export async function fetchMorningBriefing(): Promise<any> {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/briefing`)
+    const res = await fetchWithTimeout(`${API_BASE}/briefing`, {}, AI_TIMEOUT_MS)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to fetch morning briefing')
@@ -519,7 +619,7 @@ export async function generateInvestorUpdate(payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to generate investor update')
@@ -548,7 +648,7 @@ export async function classifyTasksLNO(tasks: any[]): Promise<any> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tasks })
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to classify tasks')
@@ -606,7 +706,7 @@ export async function runPreMortemAnalysis(payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to run pre-mortem analysis')
@@ -625,7 +725,7 @@ export async function generateArchitectureRecord(payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to generate ADR')
@@ -664,7 +764,7 @@ export async function coachSalesObjection(payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to generate objection coach talk track')
@@ -694,10 +794,42 @@ export async function analyzePmfFeedback(feedbackItems: Array<{ sentiment: strin
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feedbackItems })
-  })
+  }, AI_TIMEOUT_MS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to analyze PMF feedback')
+  }
+  return await res.json()
+}
+
+export interface ObservabilityUsageData {
+  totalCostUsd: number
+  totalTokens: number
+  totalInferences: number
+  avgLatencyMs: number
+  providerBreakdown: Record<string, {
+    calls: number
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    costUsd: number
+  }>
+}
+
+export async function fetchObservabilityUsage(days: number = 30): Promise<ObservabilityUsageData> {
+  const res = await fetchWithTimeout(`${API_BASE}/observability/usage?days=${days}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Failed to fetch AI observability metrics')
+  }
+  return await res.json()
+}
+
+export async function fetchRecentObservabilityLogs(limit: number = 20): Promise<any[]> {
+  const res = await fetchWithTimeout(`${API_BASE}/observability/recent?limit=${limit}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Failed to fetch AI telemetry logs')
   }
   return await res.json()
 }

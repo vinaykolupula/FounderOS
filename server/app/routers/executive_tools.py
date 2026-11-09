@@ -15,6 +15,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from app.db import get_async_session
+from app.auth import get_current_workspace
 from app.models import Workspace, ActionItem
 from app.services.investor_update import InvestorUpdateService
 from app.services.lno_prioritizer import LNOClassificationService
@@ -45,10 +46,9 @@ class StageInvestorActionSchema(BaseModel):
 @router.post("/investor-update/generate")
 async def generate_investor_update(
     payload: GenerateInvestorUpdateSchema,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    ws_res = await session.execute(select(Workspace))
-    workspace = ws_res.scalars().first()
     if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
@@ -66,10 +66,9 @@ async def generate_investor_update(
 @router.post("/investor-update/stage-action")
 async def stage_investor_update_action(
     payload: StageInvestorActionSchema,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    ws_res = await session.execute(select(Workspace))
-    workspace = ws_res.scalars().first()
     if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 

@@ -1,7 +1,10 @@
 import unittest
+from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
+from sqlmodel import select
 from app.main import app
-from app.db import init_db
+from app.db import init_db, async_session_maker
+from app.models import Connector, AIProviderSetting, Workspace
 
 
 class TestRoutersAndApi(unittest.IsolatedAsyncioTestCase):
@@ -103,11 +106,12 @@ class TestRoutersAndApi(unittest.IsolatedAsyncioTestCase):
         saved_decision = create_res.json()
         self.assertIn("message", saved_decision)
 
-        # 2. Trigger C-Suite Executive Debate
+        # 2. Trigger C-Suite Executive Debate (deterministic mock to avoid unmocked external egress)
         debate_payload = {
             "decisionTitle": "Hire VP of Sales vs. Fractional CRO"
         }
-        debate_res = await self.client.post("/api/debate", json=debate_payload)
+        with patch("app.services.llm.LLMEngine.generate_completion", return_value="Dialectic synthesis: Hire Fractional CRO first."):
+            debate_res = await self.client.post("/api/debate", json=debate_payload)
         self.assertEqual(debate_res.status_code, 200)
         debate_data = debate_res.json()
         self.assertIn("executivePerspectives", debate_data)
@@ -147,12 +151,97 @@ class TestRoutersAndApi(unittest.IsolatedAsyncioTestCase):
         self.assertIn("claude-opus-5", disc_data["models"])
 
     async def test_executive_morning_briefing_endpoint(self):
-        res = await self.client.get("/api/briefing")
+        with patch("app.services.llm.LLMEngine.generate_completion", return_value="Morning Briefing Executive Summary"):
+            res = await self.client.get("/api/briefing")
         self.assertEqual(res.status_code, 200)
         brief_data = res.json()
         self.assertIn("executiveSummary", brief_data)
         self.assertIn("omtmStatus", brief_data)
         self.assertIn("topPriorityFocus", brief_data)
+
+    async def test_oauth_google_csrf_state_protection(self):
+        # 1. Get Login URL and extract state
+        login_res = await self.client.get("/api/auth/google/login")
+        self.assertEqual(login_res.status_code, 200)
+        login_data = login_res.json()
+        self.assertIn("state", login_data)
+        self.assertIn("authUrl", login_data)
+        valid_state = login_data["state"]
+
+        # 2. Callback with missing or tampered state should fail with 400
+        fail_res = await self.client.get("/api/auth/google/callback?code=mock_code_123&state=tampered_state")
+        self.assertEqual(fail_res.status_code, 400)
+
+        # 3. Callback with valid state should succeed and store token
+        success_res = await self.client.get(f"/api/auth/google/callback?code=mock_code_123&state={valid_state}")
+        self.assertEqual(success_res.status_code, 200)
+        self.assertEqual(success_res.json().get("status"), "configured")
+
+        # 4. BUG-01 Verification: Confirm encrypted_oauth_token was persisted in database
+        async with async_session_maker() as session:
+            ws_res = await session.execute(select(Workspace).order_by(Workspace.id.asc()))
+            ws = ws_res.scalars().first()
+            ws_id = ws.id if ws else 1
+            conn_res = await session.execute(
+                select(Connector).where(Connector.workspace_id == ws_id, Connector.connector_id == "gmail")
+            )
+            connector = conn_res.scalars().first()
+            self.assertIsNotNone(connector)
+            self.assertIsNotNone(connector.encrypted_oauth_token)
+            self.assertTrue(len(connector.encrypted_oauth_token) > 20)
+
+    async def test_reset_workspace_purges_all_credentials_and_providers(self):
+        # 1. Ensure an AIProviderSetting exists (BUG-06 verification)
+        async with async_session_maker() as session:
+            ws_res = await session.execute(select(Workspace))
+            ws = ws_res.scalars().first()
+            if not ws:
+                ws = Workspace(is_onboarded=True)
+                session.add(ws)
+                await session.commit()
+                await session.refresh(ws)
+            
+            provider = AIProviderSetting(
+                workspace_id=ws.id,
+                provider_name="test_anthropic",
+                selected_model="claude-3-5-sonnet",
+                encrypted_api_key="mock_enc_key"
+            )
+            session.add(provider)
+            await session.commit()
+
+        # 2. Trigger DELETE /api/workspace
+        res = await self.client.delete("/api/workspace")
+        self.assertEqual(res.status_code, 200)
+
+        # 3. Verify AIProviderSetting for this workspace is purged
+        async with async_session_maker() as session:
+            p_res = await session.execute(select(AIProviderSetting).where(AIProviderSetting.workspace_id == ws.id))
+            providers = p_res.scalars().all()
+            self.assertEqual(len(providers), 0)
+
+    async def test_api_key_authentication_enforcement(self):
+        from app.config import settings
+        old_auth = settings.AUTH_ENABLED
+        old_key = settings.FOUNDEROS_API_KEY
+        try:
+            settings.AUTH_ENABLED = True
+            settings.FOUNDEROS_API_KEY = "faang-principal-test-key-999"
+
+            # 1. Unauthenticated request should be rejected with 401
+            unauth_res = await self.client.get("/api/workspace")
+            self.assertEqual(unauth_res.status_code, 401)
+
+            # 2. Authenticated request with X-FounderOS-Key should succeed
+            auth_res = await self.client.get("/api/workspace", headers={"X-FounderOS-Key": "faang-principal-test-key-999"})
+            self.assertEqual(auth_res.status_code, 200)
+
+            # 3. Authenticated request with Bearer authorization should succeed
+            bearer_res = await self.client.get("/api/workspace", headers={"Authorization": "Bearer faang-principal-test-key-999"})
+            self.assertEqual(bearer_res.status_code, 200)
+        finally:
+            settings.AUTH_ENABLED = old_auth
+            settings.FOUNDEROS_API_KEY = old_key
 
 
 if __name__ == "__main__":

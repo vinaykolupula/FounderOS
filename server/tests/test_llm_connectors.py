@@ -64,6 +64,23 @@ class TestLLMConnectors(unittest.IsolatedAsyncioTestCase):
         gemini_models = await LLMProviderRegistry.discover_models_live("gemini", api_key="")
         self.assertIn("gemini-3.7-flash", gemini_models)
 
+    async def test_shared_http_client_pool_lifecycle(self):
+        """PERF-03 verification: Shared client pool returns singleton and closes cleanly."""
+        from app.services.llm_connectors import get_shared_client, close_shared_client
+        client1 = get_shared_client()
+        client2 = get_shared_client()
+        self.assertIs(client1, client2)
+        self.assertFalse(client1.is_closed)
+
+        await close_shared_client()
+        self.assertTrue(client1.is_closed)
+
+        # Calling get_shared_client again creates a fresh unclosed client
+        client3 = get_shared_client()
+        self.assertIsNot(client3, client1)
+        self.assertFalse(client3.is_closed)
+        await close_shared_client()
+
 
 if __name__ == "__main__":
     unittest.main()

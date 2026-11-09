@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.db import init_db, async_session_maker
@@ -168,7 +169,8 @@ class TestExecutiveTools(unittest.IsolatedAsyncioTestCase):
             session.add(task)
             await session.commit()
 
-            update = await InvestorUpdateService.generate_investor_update(session, ws.id)
+            with patch("app.services.llm.LLMEngine.generate_completion", return_value="**Executive Summary**: Rapid fleet expansion underway."):
+                update = await InvestorUpdateService.generate_investor_update(session, ws.id)
             self.assertIn("subjectLine", update)
             self.assertIn("highlights", update)
             self.assertIn("fullMarkdown", update)
@@ -200,12 +202,13 @@ class TestExecutiveTools(unittest.IsolatedAsyncioTestCase):
         self.assertIn("impact", sim_res.json())
 
         # 3. Test Gary Klein Pre-Mortem API
-        pm_res = await self.client.post("/api/executive-tools/technical/pre-mortem", json={
-            "proposalTitle": "Migrate from monolithic SQLite to distributed Spanner",
-            "technicalScope": "Replace local state with multi-region Spanner cluster",
-            "techStack": "FastAPI + React",
-            "primaryConstraint": "2-person engineering team"
-        })
+        with patch("app.services.llm.LLMEngine.generate_completion", return_value="Failure Mode 1: Engineering bandwidth depleted by distributed sync complexity."):
+            pm_res = await self.client.post("/api/executive-tools/technical/pre-mortem", json={
+                "proposalTitle": "Migrate from monolithic SQLite to distributed Spanner",
+                "technicalScope": "Replace local state with multi-region Spanner cluster",
+                "techStack": "FastAPI + React",
+                "primaryConstraint": "2-person engineering team"
+            })
         self.assertEqual(pm_res.status_code, 200)
         pm_data = pm_res.json()
         self.assertIn("topFailureModes", pm_data)

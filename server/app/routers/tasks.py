@@ -15,6 +15,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.db import get_async_session
+from app.auth import get_current_workspace
 from app.models import Task, TaskBase, Workspace
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -37,13 +38,9 @@ class TaskUpdate(BaseModel):
 async def list_tasks(
     category: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    ws_result = await session.execute(select(Workspace))
-    workspace = ws_result.scalars().first()
-    if not workspace:
-        return []
-
     query = select(Task).where(Task.workspace_id == workspace.id)
     if category:
         query = query.where(Task.category == category)
@@ -60,17 +57,12 @@ async def list_tasks(
 
 
 @router.post("", response_model=Task)
-async def create_task(payload: TaskCreate, session: AsyncSession = Depends(get_async_session)):
-    ws_result = await session.execute(select(Workspace))
-    workspace = ws_result.scalars().first()
-    if not workspace:
-        workspace = Workspace(is_onboarded=True)
-        session.add(workspace)
-        await session.commit()
-        await session.refresh(workspace)
-        
+async def create_task(
+    payload: TaskCreate,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     assert workspace.id is not None
-
     db_task = Task(**payload.model_dump(), workspace_id=workspace.id)
     session.add(db_task)
     await session.commit()
@@ -79,10 +71,18 @@ async def create_task(payload: TaskCreate, session: AsyncSession = Depends(get_a
 
 
 @router.patch("/{task_id}", response_model=Task)
-async def update_task(task_id: int, payload: TaskUpdate, session: AsyncSession = Depends(get_async_session)):
-    task = await session.get(Task, task_id)
+async def update_task(
+    task_id: int,
+    payload: TaskUpdate,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await session.execute(
+        select(Task).where(Task.id == task_id, Task.workspace_id == workspace.id)
+    )
+    task = result.scalars().first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task not found in current workspace")
 
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -95,10 +95,17 @@ async def update_task(task_id: int, payload: TaskUpdate, session: AsyncSession =
 
 
 @router.post("/{task_id}/delegate", response_model=Task)
-async def delegate_task_to_agent(task_id: int, session: AsyncSession = Depends(get_async_session)):
-    task = await session.get(Task, task_id)
+async def delegate_task_to_agent(
+    task_id: int,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await session.execute(
+        select(Task).where(Task.id == task_id, Task.workspace_id == workspace.id)
+    )
+    task = result.scalars().first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task not found in current workspace")
 
     task.status = "DELEGATED"
     task.category = "DELEGATED"
@@ -111,19 +118,14 @@ async def delegate_task_to_agent(task_id: int, session: AsyncSession = Depends(g
 
 
 @router.post("/scan", response_model=List[Task])
-async def agent_scan_monitored_systems(session: AsyncSession = Depends(get_async_session)):
+async def agent_scan_monitored_systems(
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """
     Agent scans overall emails, calendar, Linear issues, and system alerts to discover
     and prioritize founder tasks.
     """
-    ws_result = await session.execute(select(Workspace))
-    workspace = ws_result.scalars().first()
-    if not workspace:
-        workspace = Workspace(is_onboarded=True)
-        session.add(workspace)
-        await session.commit()
-        await session.refresh(workspace)
-        
     assert workspace.id is not None
 
     # Simulated agent discovery items

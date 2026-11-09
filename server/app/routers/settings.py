@@ -15,6 +15,7 @@ from sqlmodel import select
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from app.db import get_async_session
+from app.auth import get_current_workspace
 from app.models import Workspace, AIProviderSetting, AuditLog
 from app.vault import encrypt_token, decrypt_token
 from app.services.llm_connectors import LLMProviderRegistry
@@ -38,11 +39,12 @@ class ModelDiscoverSchema(BaseModel):
 
 
 @router.get("")
-async def get_model_settings(session: AsyncSession = Depends(get_async_session)):
+async def get_model_settings(
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """Returns configured AI providers and full supported providers metadata catalog."""
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
+    if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     settings_res = await session.execute(
@@ -81,13 +83,15 @@ async def get_model_settings(session: AsyncSession = Depends(get_async_session))
 
 
 @router.post("/discover")
-async def discover_provider_models(payload: ModelDiscoverSchema, session: AsyncSession = Depends(get_async_session)):
+async def discover_provider_models(
+    payload: ModelDiscoverSchema,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """Dynamically queries the provider's live /v1/models endpoint to fetch active models."""
     api_key = payload.apiKey
     if not api_key:
-        result = await session.execute(select(Workspace))
-        workspace = result.scalars().first()
-        if workspace:
+        if workspace and workspace.id is not None:
             p_res = await session.execute(
                 select(AIProviderSetting).where(
                     AIProviderSetting.workspace_id == workspace.id,
@@ -107,11 +111,13 @@ async def discover_provider_models(payload: ModelDiscoverSchema, session: AsyncS
 
 
 @router.post("")
-async def save_model_setting(payload: ModelSettingSchema, session: AsyncSession = Depends(get_async_session)):
+async def save_model_setting(
+    payload: ModelSettingSchema,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """Saves AI provider settings, custom base URLs, and encrypts API key in Vault."""
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
+    if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     p_res = await session.execute(
@@ -176,14 +182,16 @@ async def save_model_setting(payload: ModelSettingSchema, session: AsyncSession 
 
 
 @router.post("/test")
-async def test_provider_connection(payload: ModelSettingSchema, session: AsyncSession = Depends(get_async_session)):
+async def test_provider_connection(
+    payload: ModelSettingSchema,
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """Tests provider connection live with latency measurement."""
     api_key = payload.apiKey
     custom_base_url = payload.customBaseUrl
     if not api_key:
-        result = await session.execute(select(Workspace))
-        workspace = result.scalars().first()
-        if workspace:
+        if workspace and workspace.id is not None:
             p_res = await session.execute(
                 select(AIProviderSetting).where(
                     AIProviderSetting.workspace_id == workspace.id,

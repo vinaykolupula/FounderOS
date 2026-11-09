@@ -30,7 +30,7 @@
 
 ## ⚡ What is FounderOS?
 
-FounderOS is an open-source **AI Executive Operating System** that acts as an autonomous co-founder for early-stage startup leaders. Rather than isolated chatbots, FounderOS builds a living model of your company, grounds all reasoning in your real-time financial constraints and founder DNA, runs multi-agent C-suite board debates, and prepares verified, approval-gated execution drafts.
+FounderOS is an open-source **AI Executive Operating System** that acts as an autonomous co-founder for early-stage startup leaders. Rather than isolated chatbots, FounderOS builds a living model of your company, grounds all reasoning in your real-time financial constraints and founder DNA, runs authentic multi-agent C-suite board debates with peer cross-examinations, tracks token burn & telemetry ROI, and prepares verified, approval-gated execution drafts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -54,8 +54,12 @@ FounderOS is an open-source **AI Executive Operating System** that acts as an au
 │  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘  │
 │        └─────────────┴─────────────┼─────────────┴─────────────┴─────────────┘    │
 │                                    ▼                                              │
+│                  2-ROUND DIALECTIC CROSS-EXAMINATION                              │
+│             Skeptic vs. CTO  •  CFO vs. CRO  •  VP CS vs. COO                     │
+│                                    │                                              │
+│                                    ▼                                              │
 │                            CEO Orchestrator                                       │
-│                 Prioritizes  •  Challenges  •  Recommends                         │
+│          Consensus Rating  •  One Metric That Matters  •  2-Week MVE              │
 └────────────────────────────────────────┬────────────────────────────────────────┘
                                          │
                                          ▼
@@ -77,13 +81,20 @@ FounderOS is an open-source **AI Executive Operating System** that acts as an au
   - **CTO & ADR Lab**: Simulates catastrophic failure modes 6 months into the future before committing code; enforces Dan McKinley Boring Tech innovation token discipline.
   - **CRO MEDDPICC Deal Health Radar**: Audits enterprise pipeline deals across 8 dimensions (Metrics, Economic Buyer, Decision Criteria/Process, Paper Process, Pain, Champion, Competition) with objection talk tracks.
   - **VP CS Superhuman PMF Engine**: Analyzes customer sentiment against Rahul Vohra's 40% "Very Disappointed" benchmark and segments High-Expectation Customers (HXC).
-- **6-Agent C-Suite Board Debate Matrix**: Concurrently queries **CRO** (Reforge Growth Loops & MEDDPICC), **Skeptic / CPO** (Pre-Mortem & Friction Logs), **VP CS** (Superhuman PMF & NRR), **CFO** (Paul Graham Default Alive & Burn Multiple), **CTO** (Boring Tech Rule & Two-Way Doors), and **COO** (Andy Grove High-Output Management), synthesized by a **CEO Orchestrator**.
+- **2-Round Multi-Agent Board Debate Dialectic & Live SSE Streaming**:
+  - *Round 1 (Stance Formulation)*: 6 C-suite personas formulate independent perspectives.
+  - *Round 2 (Dialectic Tension Pairs)*: Direct rebuttals (Skeptic vs. CTO, CFO vs. CRO, VP CS vs. COO).
+  - *Round 3 (CEO Synthesis)*: Consensus rating, One Metric That Matters (OMTM), 2-Week Minimum Viable Experiment (MVE), and failure kill criteria.
+  - *Server-Sent Events (SSE)*: Live streaming via `GET /api/debate/stream` visualizes perspectives as they materialize.
+- **AI Observability & Cost Telemetry Ledger**: Tracks real-time token burn (prompt, completion, reasoning), latency (ms), and financial costs ($ USD) across OpenAI, Anthropic, Gemini, DeepSeek, Groq, and Ollama with a live UI dashboard card.
+- **Multi-Tenant JWT Authentication & RBAC Engine**: Secure PBKDF2-HMAC-SHA256 password hashing, cryptographically signed access tokens, and role-based permissions (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`).
+- **Sandboxed Tool Execution Guard (`ExecutionSandbox`)**: Subprocess isolation with automatic environment credential scrubbing (`AWS_*`, `VAULT_*`, `*_SECRET`, `*_KEY`), strict 5-second execution deadlines, and memory caps.
 - **CEO Executive Morning Briefing**: Daily synthesized briefing answering *"What changed overnight and what is the single highest-leverage focus today?"* based on incoming signals.
 - **Autonomous Approval-Gated Task Execution**: Automatically processes delegated tasks into verified draft action receipts awaiting founder sign-off.
 - **Tri-Modal Security Postures & Policy Filter**: Configurable security postures (`Strict`, `Auto`, `Dangerous`) with automated AST/regex command safety rules to protect startup assets.
 - **Scoped Notebook Memory & Decision Ledger**: Line-oriented Markdown institutional memory with SHA-256 revision hashing and 300-fact sliding window cap.
 - **100% Offline Peak Local Reasoning**: Operates out-of-the-box with zero API keys required using structured local heuristics.
-- **AES-256-GCM Vault**: Authenticated encryption at rest for third-party OAuth refresh tokens and provider API keys.
+- **AES-256-GCM Vault**: Authenticated encryption at rest for third-party OAuth refresh tokens and provider API keys with 0600 file permission enforcement.
 
 ---
 
@@ -91,10 +102,11 @@ FounderOS is an open-source **AI Executive Operating System** that acts as an au
 
 | Layer | Technologies |
 |---|---|
-| **Frontend Cockpit** | React 18, TypeScript, Vite, Vanilla CSS Design System with Glassmorphism UI |
-| **Backend Core** | Python 3.10+, FastAPI, Pydantic v2, WebSockets for live push events |
-| **Data & Storage** | SQLModel / SQLAlchemy (Async), SQLite (`aiosqlite`) / PostgreSQL compatible |
-| **Security & Vault** | AES-256-GCM Authenticated Encryption (`cryptography`), Action Policy AST/Regex Engine |
+| **Frontend Cockpit** | React 18, TypeScript, Vite, Modular Views & Modals, Glassmorphism UI |
+| **Backend Core** | Python 3.10+, FastAPI, Pydantic v2, WebSockets & Server-Sent Events (SSE) |
+| **Data & Storage** | SQLModel / SQLAlchemy (Async), SQLite WAL mode / PostgreSQL compatible, Alembic Migrations |
+| **Pub/Sub Messaging** | Distributed Redis Broadcast Backend with seamless in-memory fallback |
+| **Security & Vault** | AES-256-GCM Authenticated Encryption, ExecutionSandbox env scrubbing, PBKDF2 & HMAC-SHA256 JWT |
 | **AI Reasoning Layer** | Universal LLM Connector Registry (Hermes / OpenClaw architecture) supporting the full 2026 intelligence leaderboard: Anthropic (**Claude Opus 5 max**, **Claude Fable 5 with fallback**, **Sonnet 5**), OpenAI (**GPT-5.6 Sol max**, **Luna max**, **o3-mini**), xAI (**Grok 4.6 high/xhigh**), Moonshot AI (**Kimi K3 max 2.8T**), Google Gemini (**Gemini 3.7 Flash high**, **3.1 Pro**), DeepSeek (**DeepSeek V4 Pro max**, **R1**), Zhipu AI (**GLM-5.2 max**), NVIDIA NIM (**Nemotron 3 Ultra**), Meta / Muse (**Muse Spark 1.2 xhigh**), Groq LPUs, OpenRouter (200+ models), and Local Ollama with live `/v1/models` auto-discovery |
 
 ---
@@ -129,10 +141,19 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Run database migrations
+PYTHONPATH=. ./venv/bin/alembic upgrade head
+
 # Start the FastAPI server with live reload
 uvicorn app.main:app --reload --port 8000
 ```
 > The backend API and interactive documentation will be available at `http://localhost:8000/docs`.
+
+### 3. Run Automated Tests (100% Offline)
+
+```bash
+PYTHONPATH=server ./server/venv/bin/python -m unittest discover -s server/tests -p "test_*.py" -v
+```
 
 ---
 
@@ -143,20 +164,44 @@ FounderOS/
 ├── public/                # Static assets & web manifest
 ├── media/                 # Branding, illustrations & banner assets
 ├── src/
-│   ├── App.tsx            # Main application shell, router & modals
-│   ├── api.ts             # Typed API client with error handling
+│   ├── App.tsx            # Application shell & state coordination
+│   ├── api.ts             # Typed API client with SSE streaming & auth headers
 │   ├── domain.ts          # TypeScript interfaces & domain models
+│   ├── views/             # Modular view components:
+│   │   ├── OverviewView.tsx
+│   │   ├── TasksView.tsx
+│   │   ├── ExecutiveView.tsx
+│   │   ├── DecisionsView.tsx
+│   │   ├── IntelligenceView.tsx
+│   │   ├── CompanyView.tsx
+│   │   ├── ConnectionsView.tsx
+│   │   ├── ModelsView.tsx     # Model gateway & Live AI Token Burn card
+│   │   └── OnboardingView.tsx
+│   ├── modals/            # Extracted modal dialogs:
+│   │   ├── DebateModal.tsx    # Real-time SSE streaming debate modal
+│   │   ├── MorningBriefingModal.tsx
+│   │   ├── NewDecisionModal.tsx
+│   │   ├── NewTaskModal.tsx
+│   │   ├── PreviewActionModal.tsx
+│   │   ├── SignalModal.tsx
+│   │   ├── AskFounderOSModal.tsx
+│   │   └── NotificationsDropdown.tsx
 │   └── styles.css         # Glassmorphism design system & utility styles
 ├── server/
+│   ├── alembic/           # Alembic revision ledger & migration scripts
+│   │   └── versions/      # Versioned schema migrations
 │   ├── app/
 │   │   ├── main.py        # FastAPI entrypoint & background workers lifecycle
-│   │   ├── models.py      # SQLModel database schemas
-│   │   ├── db.py          # Async session maker & database engine
-│   │   ├── vault.py       # AES-256-GCM token encryption & decryption
-│   │   ├── policy/        # Security postures & command safety rules
-│   │   ├── routers/       # API endpoints (workspace, briefing, debate, tasks, etc.)
-│   │   ├── services/      # Unified LLMEngine, briefing synthesizer & voice profiler
-│   │   └── workers/       # Background execution & signal ingestion loops
+│   │   ├── models.py      # SQLModel database schemas (User, TokenUsageLedger, etc.)
+│   │   ├── db.py          # Async session maker, engine & SQLite WAL config
+│   │   ├── auth.py        # PBKDF2 hashing, JWT engine, RBAC & tenant scoping
+│   │   ├── vault.py       # AES-256-GCM token encryption with 0600 key guard
+│   │   ├── rag.py         # 384-dimensional subword morphological vectorizer
+│   │   ├── policy/        # Security postures, command safety & ExecutionSandbox
+│   │   ├── routers/       # API endpoints (workspace, debate, auth, observability, etc.)
+│   │   ├── services/      # LLMEngine, telemetry cost ledger, event bus, briefing
+│   │   └── workers/       # Background execution, ingest, and review scheduler loops
+│   ├── tests/             # 77 unit & integration tests (100% offline, mocked)
 │   └── requirements.txt   # Python dependencies
 ├── architecture.md        # Authoritative system design & architecture specification
 ├── harness.md             # AI Agent Harness specification & mental models reference

@@ -1,60 +1,85 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from app.db import async_session_maker
 from app.models import Workspace, Decision, ActionItem, AuditLog
 from app.services.events import manager
 
+from typing import Optional
+
 logger = logging.getLogger("founderos.scheduler")
 
 
-async def run_decision_review_check():
+async def run_decision_review_check(workspace_id: Optional[int] = None):
     """
     Checks decision ledger items, flags decisions requiring retrospective review,
-    and creates founder alerts in the workspace.
+    and creates founder alerts across workspaces.
     """
     logger.info("Running decision review date scheduler check...")
     async with async_session_maker() as session:
         try:
-            result = await session.execute(select(Workspace))
-            workspace = result.scalars().first()
-            if not workspace:
+            if workspace_id:
+                result = await session.execute(select(Workspace).where(Workspace.id == workspace_id))
+                workspaces = result.scalars().all()
+            else:
+                result = await session.execute(select(Workspace))
+                workspaces = result.scalars().all()
+
+            if not workspaces:
                 return
 
-            decisions_res = await session.execute(select(Decision).where(Decision.workspace_id == workspace.id))
-            decisions = decisions_res.scalars().all()
+            now = datetime.now(timezone.utc)
+            total_flagged = 0
 
-            updated_count = 0
-            for d in decisions:
-                # Flag open decisions for learning review
-                if d.status == "Open" and "August 14" in d.detail:
-                    d.status = "Learning Required"
-                    session.add(d)
-                    updated_count += 1
+            for workspace in workspaces:
+                decisions_res = await session.execute(select(Decision).where(Decision.workspace_id == workspace.id))
+                decisions = decisions_res.scalars().all()
 
-                    # Add action item alert for founder
-                    action = ActionItem(
+                updated_count = 0
+                for d in decisions:
+                    # Flag open decisions for learning review if review date has passed or explicitly due
+                    is_due = False
+                    if d.status == "Open":
+                        if d.review_date is not None:
+                            # Normalize naive datetime to UTC
+                            r_date = d.review_date if d.review_date.tzinfo else d.review_date.replace(tzinfo=timezone.utc)
+                            if r_date <= now:
+                                is_due = True
+                        elif "August 14" in d.detail:
+                            # Backward-compatible fallback for seeded demo data
+                            is_due = True
+
+                    if is_due:
+                        d.status = "Learning Required"
+                        session.add(d)
+                        updated_count += 1
+
+                        # Add action item alert for founder
+                        action = ActionItem(
+                            workspace_id=workspace.id,
+                            title=f"Retrospective Review: {d.title}",
+                            detail=f"Decision {d.decision_code} review date has arrived. Review assumptions vs outcomes.",
+                            source="Scheduler",
+                            status="Ready"
+                        )
+                        session.add(action)
+
+                if updated_count > 0:
+                    total_flagged += updated_count
+                    audit = AuditLog(
                         workspace_id=workspace.id,
-                        title=f"Retrospective Review: {d.title}",
-                        detail=f"Decision {d.decision_code} review date has arrived. Review assumptions vs outcomes.",
-                        source="Scheduler",
-                        status="Ready"
+                        actor="scheduler",
+                        event="DECISION_REVIEWS_TRIGGERED",
+                        details={"decisionsUpdated": updated_count}
                     )
-                    session.add(action)
+                    session.add(audit)
+                    await session.commit()
+                    await manager.broadcast_refresh(str(workspace.id))
 
-            if updated_count > 0:
-                audit = AuditLog(
-                    workspace_id=workspace.id,
-                    actor="scheduler",
-                    event="DECISION_REVIEWS_TRIGGERED",
-                    details={"decisionsUpdated": updated_count}
-                )
-                session.add(audit)
-                await session.commit()
-                await manager.broadcast_refresh(str(workspace.id))
-                logger.info(f"Scheduler check completed: {updated_count} decision reviews flagged.")
+            if total_flagged > 0:
+                logger.info(f"Scheduler check completed: {total_flagged} decision reviews flagged.")
             else:
                 logger.info("Scheduler check completed: All decision reviews up to date.")
 

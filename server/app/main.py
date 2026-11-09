@@ -14,7 +14,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import init_db
-from app.routers import workspace, auth, brief, debate, settings as model_settings, tasks, briefing, executive_tools
+from app.routers import workspace, auth, brief, debate, settings as model_settings, tasks, briefing, executive_tools, observability
 from app.workers.ingest import start_background_ingestion_loop
 from app.workers.execution import start_execution_loop
 from app.services.scheduler import start_scheduler_loop
@@ -48,6 +48,10 @@ async def lifespan(app: FastAPI):
     scheduler_task.cancel()
     execution_task.cancel()
 
+    # 4. Gracefully close shared HTTP client connection pool
+    from app.services.llm_connectors import close_shared_client
+    await close_shared_client()
+
 
 # Instantiate FastAPI Application
 app = FastAPI(
@@ -75,6 +79,7 @@ app.include_router(debate.router)
 app.include_router(model_settings.router)
 app.include_router(tasks.router)
 app.include_router(executive_tools.router)
+app.include_router(observability.router)
 
 
 @app.get("/")

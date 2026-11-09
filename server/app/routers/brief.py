@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from app.db import get_async_session
+from app.auth import get_current_workspace
 from app.models import Workspace, CompanyProfile, Evidence
 from app.rag import rank_evidence_by_query
 
@@ -16,13 +17,14 @@ router = APIRouter(prefix="/api/brief", tags=["Daily CEO Brief & RAG"])
 
 
 @router.post("/generate")
-async def generate_dynamic_brief(session: AsyncSession = Depends(get_async_session)):
+async def generate_dynamic_brief(
+    session: AsyncSession = Depends(get_async_session),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """
     Generates a dynamic CEO Brief using vector evidence ranking matched against Company Profile constraints.
     """
-    result = await session.execute(select(Workspace))
-    workspace = result.scalars().first()
-    if not workspace:
+    if not workspace or workspace.id is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     company_res = await session.execute(select(CompanyProfile).where(CompanyProfile.workspace_id == workspace.id))

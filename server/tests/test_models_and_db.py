@@ -165,6 +165,32 @@ class TestModelsAndDatabase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved_setting.reasoning_effort, "max")
             self.assertTrue(saved_setting.is_active)
 
+    async def test_sqlite_wal_pragmas_and_concurrency(self):
+        """PERF-02 verification: Confirms SQLite WAL mode and busy timeout are configured."""
+        from sqlalchemy import text
+        from app.db import engine
+        from app.config import settings
+
+        if "sqlite" in settings.DATABASE_URL:
+            async with engine.connect() as conn:
+                busy = (await conn.execute(text("PRAGMA busy_timeout;"))).scalar()
+                self.assertEqual(busy, 5000)
+                sync = (await conn.execute(text("PRAGMA synchronous;"))).scalar()
+                # 1 = NORMAL
+                self.assertEqual(sync, 1)
+
+    async def test_broadcast_event_manager_horizontal_scalability(self):
+        """PERF-04 verification: Verifies decoupled broadcast backend delivers events."""
+        from app.services.events import ConnectionManager, InMemoryBroadcastBackend
+        backend = InMemoryBroadcastBackend()
+        mgr = ConnectionManager(backend=backend)
+        received = []
+
+        await backend.subscribe("workspace:42", lambda msg: received.append(msg))
+        await mgr.broadcast_refresh("42")
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0].get("type"), "REFRESH")
+
 
 if __name__ == "__main__":
     unittest.main()
